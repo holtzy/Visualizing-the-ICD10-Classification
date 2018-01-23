@@ -1,5 +1,5 @@
 ---
-title: "A clean and uncluttered template"
+title: "Visualizing the ICD10 classification"
 author: "by [Yan Holtz](https://github.com/holtzy/) - `r format(Sys.time(), '%d %B %Y')`"
 output:
   epuRate::epurate:
@@ -17,189 +17,176 @@ knitr::asis_output(htmltools::htmlPreserve("<br><br>"))
 ```
 
 
-> I find it not too bad to start with a couple of sentences of introduction. Explain briefly what this document is going to talk about. May be add a [useful link](www.r-graph-gallery.com) relative to this project
 
 
-# Get the data
+
+
+> The [World Health Organization](https://en.wikipedia.org/wiki/World_Health_Organization) proposes a way to classify human diseases: the [ICD10 Classification](https://en.wikipedia.org/wiki/ICD-10). About 100k diseases are defined and organized. This page provides a few way to visualize this information.
+
+
+# Choose your flavor {.tabset .tabset-fade .tabset-pills}
 ***
-Usually I always start by loading libraries. The tidyverse is probably the package I use the most. Quite difficult to imagine analysing data without it. It is a good practice to load all the packages in the same time. It allows to know exactly what is needed to reproduce your analysis.
+
+
+
+## Data source
+
+The ICD10 classification has been downloaded on the WHO website as a text file in September 2017. The first step of this work is to modify the format to get something more confortable to work with. The result clean file is available here in case you would like to conduct further analysis.  
+
+There are 22 main categories, which are subdivided in **4 levels** of grouping. The file giving the ICD codes has been found [here](http://biobank.ctsu.ox.ac.uk/crystal/codown.cgi) the 24/08/2017. The subdivisions work as follow.  
+
+Group22 is a special category with weird numbers.  
+
+The ICD10 classification is describe in this diagram:  
+
+<style>
+div.blue pre { background-color:lightblue; }
+</style>
+<div class = "blue">
+````
+NODE 1: Infectious disease (Level 1) nodes= 1 - 22
+   --	NODE 23: A00-A09 Intestinal infectious diseases   (Level 2 = group) nodes= 23 - 285
+      -- NODE286: A00 Cholera  (Level 3 = subgroup) nodes= 286 - 19154
+         -- NODE287 A00.0 Cholera due to Vibrio cholerae 01, biovar cholerae  (Level 4 = subsubgroup)
+         -- NODE288 A00.1 Cholera due to Vibrio cholerae 01, biovar eltor  
+            -- NODE2881 something eventually, but not always, what makes the classification even more complicated. (Level 5 = subsubsubgroup) always 5 characters in code
+````
+</div>
+
 ```{r, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(rmarkdown)    # You need this library to run this template.
 library(epuRate)      # Install with devtools: install_github("holtzy/epuRate", force=TRUE)
+library(DT)           # To display tables
+
+# Trees
+library(networkD3)          # For radial network
+library(collapsibleTree)    # Tree collapsible
+
+# Treemap
+library(treemap)            # For the static version
+library(d3treeR)            # For the interactive version
 ```
 
-Then I explain what is my input data and I load it. Here is how it looks like:
 ```{r}
-# Show it:
-mtcars %>% head(5)
-```
+#Read the file
+ICD=read.table("WHO_disease_classification.txt.gz", sep="\t", header=T, quote = "")
 
-This file has `r nrow(mtcars)` lines and `r ncol(mtcars)` columns. It is ready to be analysed.
+# I take only the level1. It has a parent node number = 0
+level1 = ICD  %>% filter(parent_id==0) %>%  select(-selectable) 
+colnames(level1)=c("coding_L1", "meaning_L1", "node_L1", "parent_L1")
 
+# Merge with the level2
+level2 = ICD  %>% filter(parent_id>0 & parent_id<=22) %>%  select(-selectable) 
+colnames(level2)=c("coding_L2", "meaning_L2", "node_L2", "parent_L2")
+all = merge(level1, level2, by.x="node_L1", by.y="parent_L2", all.x=T)
 
+# Merge with the level3
+level3 = ICD  %>% filter(parent_id>22 & parent_id<=285) %>%  select(-selectable) 
+colnames(level3)=c("coding_L3", "meaning_L3", "node_L3", "parent_L3")
+all = merge(all, level3, by.x="node_L2", by.y="parent_L3", all.x=T)
 
+# Merge with the level4
+maxlevel4 = ICD$node_id[which(ICD$parent_id %in% level3$node_L3) ]  %>% max()
+level4 = ICD  %>% filter(parent_id>285 & parent_id<=maxlevel4) %>%  select(-selectable) 
+colnames(level4)=c("coding_L4", "meaning_L4", "node_L4", "parent_L4")
+all = merge(all, level4, by.x="node_L3", by.y="parent_L4", all=T)
 
+# Merge with the level5
+# Do understand why some level5 have a node value very low. Example: node=4342 / code=I7000
+level5 = ICD %>% mutate(nchar=nchar(as.character(coding))) %>% filter(nchar==5) %>%  select(-selectable, -nchar) 
+colnames(level5)=c("coding_L5", "meaning_L5", "node_L5", "parent_L5")
+all = merge(all, level5, by.x="node_L4", by.y="parent_L5", all.x=T)
 
-# A few analysis {.tabset .tabset-fade .tabset-pills}
-***
-Here are 3 version of a circular barplot that you can find in the R graph gallery. Note that the figure is centered. You can change the size of the plot with **fig.width** and **fig.height**  
+# Just a small bug to remove for a few codes that have a X in their name
+all = all[which(!is.na(all$node_L1)) , ]
 
-## basic
-Let's start with a basic version of a circular representation of the data
-```{r, warning=FALSE, fig.align='center' }
-# Create dataset
-data=data.frame(
-  individual=paste( "Mister ", seq(1,60), sep=""),
-  value=sample( seq(10,100), 60, replace=T)
+# By hand, I create a table that describes the 22 major categories
+mainCat=data.frame(
+  node=seq(1,22),
+  short=c("Infectious-Parasitic","Neoplasms","Blood-Immune","Nutritional","Mental","Nervous","Eye","Ear","Circulatory","Respiratory","Digestive","Skin","musculoskeletal", "Genitourinary","Childbirth","Perinatal","unclassified","Malformation","Injury","External-Causes","Factor-influencing","Special"),
+  long=c("Certain infectious and parasitic diseases","Neoplasms"  ,"Diseases of the blood and blood-forming organs and certain disorders involving the immune mechanism"  ,"Endocrine, nutritional and metabolic diseases"  ,"Mental and behavioural disorders"  ,"Diseases of the nervous system"  ,"Diseases of the eye and adnexa" ,"Diseases of the ear and mastoid process"  ,"Diseases of the circulatory system"  ,"Diseases of the respiratory system"  ,"Diseases of the digestive system"  ,"Diseases of the skin and subcutaneous tissue"  ,"Diseases of the musculoskeletal system and connective tissue"  ,"Diseases of the genitourinary system"  ,"Pregnancy, childbirth and the puerperium"  ,"Certain conditions originating in the perinatal period" ,"Congenital malformations, deformations and chromosomal abnormalities"  ,"Symptoms, signs and abnormal clinical and laboratory findings, not elsewhere classified" ,"Injury, poisoning and certain other consequences of external causes"  ,"External causes of morbidity and mortality"  ,"Factors influencing health status and contact with health services"  ,"Codes for special purposes")
 )
 
-# Set a number of 'empty bar'
-empty_bar=10
- 
-# Add lines to the initial dataset
-to_add = matrix(NA, empty_bar, ncol(data))
-colnames(to_add) = colnames(data)
-data=rbind(data, to_add)
-data$id=seq(1, nrow(data))
- 
-# Get the name and the y position of each label
-label_data=data
-number_of_bar=nrow(label_data)
-angle= 90 - 360 * (label_data$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
-label_data$hjust<-ifelse( angle < -90, 1, 0)
-label_data$angle<-ifelse(angle < -90, angle+180, angle)
- 
-# Make the plot
-p = ggplot(data, aes(x=as.factor(id), y=value)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
-  geom_bar(stat="identity", fill=alpha("green", 0.3)) +
-  ylim(-100,120) +
-  theme_minimal() +
-  theme(
-    axis.text = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.margin = unit(rep(-1,4), "cm") 
-  ) +
-  coord_polar(start = 0) + 
-  geom_text(data=label_data, aes(x=id, y=value+10, label=individual, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
- 
-p
+# And I add these explicit names of highest groups (Level1)
+all = merge(all, mainCat, by.x="node_L1", by.y="node", all.x=T)
+
+# Order the table
+all=all %>% arrange(node_L1, node_L2, node_L3, node_L4, node_L5)
+
+# CHange name
+ICD=all
+
+# Save in 2 formats (R ans csv)
+save(ICD, file="WHO_disease_classification_clean.R")
+z <- gzfile("WHO_disease_classification_clean.csv.gz")
+write.csv(ICD, z)
+``````
+
+
+
+
+
+
+
+
+## Table
+This table displays all the diseases stored in the ICD10 classification. Use the search bar to find a disease you are interested in.  
+
+```{r  fig.width=150 , warning=FALSE, message=FALSE}
+tmp = ICD %>% 
+  mutate(Chapt=gsub("Chapter ", "", coding_L1)) %>%
+  mutate(meaning_L1=gsub("Chapter","",meaning_L1)) %>% 
+  mutate(code_L2=gsub("Block ","",coding_L2)) %>% 
+  mutate(meaning_L2=gsub(".*? (.+)", "\\1", meaning_L2)) %>% 
+  mutate(meaning_L3=gsub(".*? (.+)", "\\1", meaning_L3)) %>% 
+  mutate(meaning_L4=gsub(".*? (.+)", "\\1", meaning_L4)) %>% 
+  select(Chapt, short, code_L2, meaning_L2, coding_L3, meaning_L3, coding_L4, meaning_L4) 
+
+datatable(tmp, filter = 'top')
 ```
 
 
-## grouped
-```{r, warning=FALSE, fig.align='center' }
-# Create dataset
-data=data.frame(
-  individual=paste( "Mister ", seq(1,60), sep=""),
-  group=c( rep('A', 10), rep('B', 30), rep('C', 14), rep('D', 6)) ,
-  value=sample( seq(10,100), 60, replace=T)
-)
 
-# Set a number of 'empty bar' to add at the end of each group
-empty_bar=4
-to_add = data.frame( matrix(NA, empty_bar*nlevels(data$group), ncol(data)) )
-colnames(to_add) = colnames(data)
-to_add$group=rep(levels(data$group), each=empty_bar)
-data=rbind(data, to_add)
-data=data %>% arrange(group)
-data$id=seq(1, nrow(data))
- 
-# Get the name and the y position of each label
-label_data=data
-number_of_bar=nrow(label_data)
-angle= 90 - 360 * (label_data$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
-label_data$hjust<-ifelse( angle < -90, 1, 0)
-label_data$angle<-ifelse(angle < -90, angle+180, angle)
- 
-# Make the plot
-p = ggplot(data, aes(x=as.factor(id), y=value, fill=group)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
-  geom_bar(stat="identity", alpha=0.5) +
-  ylim(-100,120) +
-  theme_minimal() +
-  theme(
-    legend.position = "none",
-    axis.text = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.margin = unit(rep(-1,4), "cm") 
-  ) +
-  coord_polar() + 
-  geom_text(data=label_data, aes(x=id, y=value+10, label=individual, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) 
- 
-p
+
+
+
+
+
+## Tree
+```{r, warning=FALSE, width=50}
+# Keep 3 levels
+ICD_10 = ICD %>%  select(short, meaning_L2, meaning_L3) %>% unique() %>% droplevels() 
+
+collapsibleTree(ICD_10, c("short", "meaning_L2", "meaning_L3"), width="2000px", height="800px", fontSize = 12)
 ```
 
-## complex
-```{r, warning=FALSE, fig.align='center' }
-# Create dataset
-data=data.frame(
-  individual=paste( "Mister ", seq(1,60), sep=""),
-  group=c( rep('A', 10), rep('B', 30), rep('C', 14), rep('D', 6)) ,
-  value=sample( seq(10,100), 60, replace=T)
-)
- 
-# Set a number of 'empty bar' to add at the end of each group
-empty_bar=3
-to_add = data.frame( matrix(NA, empty_bar*nlevels(data$group), ncol(data)) )
-colnames(to_add) = colnames(data)
-to_add$group=rep(levels(data$group), each=empty_bar)
-data=rbind(data, to_add)
-data=data %>% arrange(group)
-data$id=seq(1, nrow(data))
- 
-# Get the name and the y position of each label
-label_data=data
-number_of_bar=nrow(label_data)
-angle= 90 - 360 * (label_data$id-0.5) /number_of_bar     # I substract 0.5 because the letter must have the angle of the center of the bars. Not extreme right(1) or extreme left (0)
-label_data$hjust<-ifelse( angle < -90, 1, 0)
-label_data$angle<-ifelse(angle < -90, angle+180, angle)
- 
-# prepare a data frame for base lines
-base_data=data %>% 
-  group_by(group) %>% 
-  summarize(start=min(id), end=max(id) - empty_bar) %>% 
-  rowwise() %>% 
-  mutate(title=mean(c(start, end)))
- 
-# prepare a data frame for grid (scales)
-grid_data = base_data
-grid_data$end = grid_data$end[ c( nrow(grid_data), 1:nrow(grid_data)-1)] + 1
-grid_data$start = grid_data$start - 1
-grid_data=grid_data[-1,]
- 
-# Make the plot
-p = ggplot(data, aes(x=as.factor(id), y=value, fill=group)) +       # Note that id is a factor. If x is numeric, there is some space between the first bar
-  
-  geom_bar(aes(x=as.factor(id), y=value, fill=group), stat="identity", alpha=0.5) +
-  
-  # Add a val=100/75/50/25 lines. I do it at the beginning to make sur barplots are OVER it.
-  geom_segment(data=grid_data, aes(x = end, y = 80, xend = start, yend = 80), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
-  geom_segment(data=grid_data, aes(x = end, y = 60, xend = start, yend = 60), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
-  geom_segment(data=grid_data, aes(x = end, y = 40, xend = start, yend = 40), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
-  geom_segment(data=grid_data, aes(x = end, y = 20, xend = start, yend = 20), colour = "grey", alpha=1, size=0.3 , inherit.aes = FALSE ) +
-  
-  # Add text showing the value of each 100/75/50/25 lines
-  annotate("text", x = rep(max(data$id),4), y = c(20, 40, 60, 80), label = c("20", "40", "60", "80") , color="grey", size=3 , angle=0, fontface="bold", hjust=1) +
-  
-  geom_bar(aes(x=as.factor(id), y=value, fill=group), stat="identity", alpha=0.5) +
-  ylim(-100,120) +
-  theme_minimal() +
-  theme(
-    legend.position = "none",
-    axis.text = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.margin = unit(rep(-1,4), "cm") 
-  ) +
-  coord_polar() + 
-  geom_text(data=label_data, aes(x=id, y=value+10, label=individual, hjust=hjust), color="black", fontface="bold",alpha=0.6, size=2.5, angle= label_data$angle, inherit.aes = FALSE ) +
-  
-  # Add base line information
-  geom_segment(data=base_data, aes(x = start, y = -5, xend = end, yend = -5), colour = "black", alpha=0.8, size=0.6 , inherit.aes = FALSE )  +
-  geom_text(data=base_data, aes(x = title, y = -18, label=group), hjust=c(1,1,0,0), colour = "black", alpha=0.8, size=4, fontface="bold", inherit.aes = FALSE)
- 
-p
+
+## Treemap
+
+```{r}
+# reformat data
+ICD_10 = ICD %>%  
+  select(short, meaning_L2, meaning_L3) %>% 
+  unique() %>% 
+  droplevels() %>% 
+  mutate(value=1)
+
+
+# basic treemap
+d3tree2(treemap(ICD_10,
+            index=c("short", "meaning_L2","meaning_L3"),
+            vSize="value",
+            type="index"
+            ) ,  rootname = "The 22 groups of the ICD10 classification", width = "100%", height="700px" ) 
 ```
+
+
+
+
+
+
+
+
+
 
