@@ -207,8 +207,13 @@ treemap(ICD_10, index=c("short", "meaning_L2"), vSize="value", type="index", pal
 ***
 
 ```{r}
+devtools::install_github("holtzy/circlepackeR")
+
+library(circlepackeR)         # devtools::install_github("jeromefroe/circlepackeR")
+
+
 # select column in the ICD 10 classif
-ICD_10 = ICD %>%  select(short, meaning_L2, meaning_L3) %>% unique() %>% droplevels() %>% mutate(value=1)
+ICD_10 = ICD %>%  select(short, meaning_L2, meaning_L3) %>% unique() %>% droplevels() %>% mutate(value=1) %>% na.omit()
 
 # create a data.tree format
 ICD_10$pathString <- paste("ICD10", 
@@ -219,7 +224,10 @@ ICD_10$pathString <- paste("ICD10",
 temp <- as.Node(ICD_10)
 
 # Make the plot
-#circlepackeR(temp, size = "value", color_min="white", height=600, width=600)
+widg=circlepackeR(temp, size = "value", color_min="white", height=600, width=600)
+#library(htmlwidgets)
+saveWidget(widg, file = "~/Desktop/test_circle_pack.html", selfcontained = TRUE)
+
 ```
 
 
