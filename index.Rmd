@@ -264,6 +264,17 @@ NODE 1: Infectious disease (Level 1) nodes= 1 - 22
 
 
 
+## Circular Tree
+```{r}
 
+# Create an edge list
+edges_level1_2 = ICD %>% select(meaning_L1, meaning_L2) %>% unique %>% rename(from=meaning_L1, to=meaning_L2)
+edges_level2_3 = ICD %>% select(meaning_L2, meaning_L3) %>% unique %>% rename(from=meaning_L2, to=meaning_L3)
+edges_level3_4 = ICD %>% select(meaning_L3, meaning_L4) %>% unique %>% rename(from=meaning_L3, to=meaning_L4)
+edge_list=rbind(edges_level1_2, edges_level2_3, edges_level3_4)
+
+
+
+```
 
 
