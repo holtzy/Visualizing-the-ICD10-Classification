@@ -11,31 +11,15 @@ output:
 
 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-  
-```{r echo=FALSE}
-# Just to add space between the introduction of the document
-knitr::asis_output(htmltools::htmlPreserve("<br><br>"))
-```
+<br><br>
 
 
 
 
 
-
-> The [World Health Organization](https://en.wikipedia.org/wiki/World_Health_Organization) provides a way to classify human diseases: the [ICD10 Classification](https://en.wikipedia.org/wiki/ICD-10). About 16k diseases are defined and organized. This page provides a few way to visualize this information.
-
+> The [World Health Organization](https://en.wikipedia.org/wiki/World_Health_Organization) provides a way to classify human diseases: the [ICD10 Classification](https://en.wikipedia.org/wiki/ICD-10). About 16,000 diseases are defined and organized. This page provides a few way to visualize this information. A clean data frame providing the information is available [here](https://github.com/holtzy/Visualizing-the-ICD10-Classification/blob/master/WHO_disease_classification_clean.csv.gz).
 
 
-
-
-# {.tabset .tabset-fade .tabset-pills}
-***
-
-## Overview
-***
 
 ```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=6}
 library(tidyverse)
@@ -43,18 +27,14 @@ library(rmarkdown)    # You need this library to run this template.
 library(epuRate)      # Install with devtools: install_github("holtzy/epuRate", force=TRUE)
 library(DT)           # To display tables
 
-# Trees
-library(networkD3)          # For radial network
-library(collapsibleTree)    # Tree collapsible
 
 # Treemap
 library(treemap)            # For the static version
 library(d3treeR)            # For the interactive version
 
-# Circle packing
-library(data.tree)
-library(circlepackeR)
-
+# Trees
+library(networkD3)          # For radial network
+library(collapsibleTree)    # Tree collapsible
 
 #Read the file
 ICD=read.table("WHO_disease_classification.txt.gz", sep="\t", header=T, quote = "")
@@ -108,28 +88,14 @@ ICD=all
 save(ICD, file="WHO_disease_classification_clean.R")
 z <- gzfile("WHO_disease_classification_clean.csv.gz")
 write.csv(ICD, z)
-
-```
-
-The ICD10 classification is divided in 22 major groups. Here is the number of diseases repertoried in each of them. 
-
-```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=5}
-ICD %>% mutate(meaning_L1=gsub("Chapter","",meaning_L1)) %>% group_by(meaning_L1) %>% count() %>% arrange(n) %>% ungroup() %>% mutate(meaning_L1=factor(meaning_L1,meaning_L1)) %>%
-  ggplot(aes(x=meaning_L1, y=n)) + 
-    geom_segment( aes(x=meaning_L1, xend=meaning_L1, y=n, yend=0), color="skyblue", alpha=0.7) +
-    geom_point(size=4, color="orange") +
-    coord_flip() +
-    theme_light() +
-    theme( panel.grid.major.y = element_blank()) +
-    ylab("Number of diseases repertoried in the group") +
-    xlab("")
-
 ```
 
 
 
 
 
+# {.tabset .tabset-fade .tabset-pills}
+***
 
 
 
@@ -143,6 +109,34 @@ ICD %>% mutate(meaning_L1=gsub("Chapter","",meaning_L1)) %>% group_by(meaning_L1
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Tree
+***
+
+```{r, warning=FALSE, width=50}
+# Keep 3 levels
+ICD_10 = ICD %>%  select(short, meaning_L2, meaning_L3) %>% unique() %>% droplevels() 
+
+collapsibleTree(ICD_10, c("short", "meaning_L2", "meaning_L3"), width="2000px", height="800px", fontSize = 12, zoomable = FALSE)
+```
 
 
 ## Table
@@ -167,26 +161,12 @@ datatable(tmp, filter = 'top', rownames = FALSE )
 
 
 
-
-
-
-## Tree
-***
-
-```{r, warning=FALSE, width=50}
-# Keep 3 levels
-ICD_10 = ICD %>%  select(short, meaning_L2, meaning_L3) %>% unique() %>% droplevels() 
-
-collapsibleTree(ICD_10, c("short", "meaning_L2", "meaning_L3"), width="2000px", height="800px", fontSize = 12, zoomable = FALSE)
-```
-
-
 ## Treemap
 ***
 
 
 ```{r, fig.width=9.5, fig.height=6}
-#, fig.keep='none'}
+
 # reformat data
 ICD_10 = ICD %>%  
   select(short, meaning_L2, meaning_L3) %>% 
@@ -196,85 +176,63 @@ ICD_10 = ICD %>%
 
 
 # basic treemap
-treemap(ICD_10, index=c("short", "meaning_L2"), vSize="value", type="index", palette = "RdYlGn")
+static = treemap(ICD_10, index=c("short", "meaning_L2"), vSize="value", type="index", palette = "RdYlGn", draw=FALSE)
 
-#interactive=d3tree2( static,  rootname = "The 22 groups of the ICD10 classification") 
-#interactive
-```
-
-
-## Circle packing
-***
-
-```{r}
-devtools::install_github("holtzy/circlepackeR")
-
-library(circlepackeR)         # devtools::install_github("jeromefroe/circlepackeR")
-
-
-# select column in the ICD 10 classif
-ICD_10 = ICD %>%  select(short, meaning_L2, meaning_L3) %>% unique() %>% droplevels() %>% mutate(value=1) %>% na.omit()
-
-# create a data.tree format
-ICD_10$pathString <- paste("ICD10", 
-                          ICD_10$short,
-                          ICD_10$meaning_L2, 
-                          ICD_10$meaning_L3,
-                          sep = "/")
-temp <- as.Node(ICD_10)
-
-# Make the plot
-widg=circlepackeR(temp, size = "value", color_min="white", height=600, width=600)
-#library(htmlwidgets)
-saveWidget(widg, file = "~/Desktop/test_circle_pack.html", selfcontained = TRUE)
-
+interactive=d3tree2( static,  rootname = "The 22 groups of the ICD10 classification") 
+interactive
 ```
 
 
 
 
-## About
+## Chapter size
 ***
 
-The [ICD10 Classification](https://en.wikipedia.org/wiki/ICD-10) has been downloaded on the [WHO website](http://www.who.int/en/) as a text file in September 2017 ([link](https://github.com/holtzy/Visualizing-the-ICD10-Classification/blob/master/WHO_disease_classification.txt.gz). The first step of this work is to modify the format to get something more confortable to work with. The result clean file is available [here](https://github.com/holtzy/Visualizing-the-ICD10-Classification/blob/master/WHO_disease_classification_clean.csv.gz) in case you would like to conduct further analysis.  
 
-There are 22 main categories, which are subdivided in **4 levels** of grouping. The file giving the ICD codes has been found [here](http://biobank.ctsu.ox.ac.uk/crystal/codown.cgi) the 24/08/2017. The subdivisions work as follow.  
 
-Group22 is a special category with weird numbers.  
+The ICD10 classification is divided in 22 major chapters. Here is the number of diseases repertoried in each of them. 
 
-The ICD10 classification is described in this diagram:  
+```{r, message=FALSE, warning=FALSE, fig.width=10, fig.height=5}
+ICD %>% mutate(meaning_L1=gsub("Chapter","",meaning_L1)) %>% group_by(meaning_L1) %>% count() %>% arrange(n) %>% ungroup() %>% mutate(meaning_L1=factor(meaning_L1,meaning_L1)) %>%
+  ggplot(aes(x=meaning_L1, y=n)) + 
+    geom_segment( aes(x=meaning_L1, xend=meaning_L1, y=n, yend=0), color="skyblue", alpha=0.7) +
+    geom_point(size=4, color="orange") +
+    coord_flip() +
+    theme_light() +
+    theme( panel.grid.major.y = element_blank()) +
+    ylab("Number of diseases repertoried in the group") +
+    xlab("")
 
-<style>
-div.blue pre { background-color:lightblue; }
-</style>
-<div class = "blue">
-````
+```
+
+
+
+## Method
+***
+
+The [ICD10 Classification](https://en.wikipedia.org/wiki/ICD-10) has been downloaded on the [WHO website](http://www.who.int/en/) as a text file in September 2017 ([link](https://github.com/holtzy/Visualizing-the-ICD10-Classification/blob/master/WHO_disease_classification.txt.gz)).  
+
+The first step of this work was to modify the format to get something more confortable to work with. The resulting clean file is available [here](https://github.com/holtzy/Visualizing-the-ICD10-Classification/blob/master/WHO_disease_classification_clean.csv.gz) in case you would like to conduct further analysis.  
+
+There are 22 main categories, which are subdivided in **4 levels** of grouping. The file giving the meaning of the ICD codes has been found [here](http://biobank.ctsu.ox.ac.uk/crystal/codown.cgi) the 24/08/2017.  
+
+The following diagram tries to describe how the classification is organized. It shows the 5 levels of classification leading to the disease Cholera.  
+
+
+
+```
 NODE 1: Infectious disease (Level 1) nodes= 1 - 22
 
-   --	NODE 23: A00-A09 Intestinal infectious diseases   (Level 2 = group) nodes= 23 - 285
+   --	NODE 23: A00-A09 Intestinal infectious diseases (Level 2) nodes= 23 - 285
    
-      -- NODE286: A00 Cholera  (Level 3 = subgroup) nodes= 286 - 19154
+      -- NODE286: A00 Cholera  (Level 3) nodes= 286 - 19154
       
-         -- NODE287 A00.0 Cholera due to Vibrio cholerae 01, biovar cholerae  (Level 4 = subsubgroup)
-         -- NODE288 A00.1 Cholera due to Vibrio cholerae 01, biovar eltor  
+         -- NODE287 A00.0 Cholera due to Vibrio cholerae 01, biovar cholerae  (Level 4)
+         -- NODE288 A00.1 Cholera due to Vibrio cholerae 01, biovar eltor (Level 4)
          
-            -- NODE2881 something eventually, but not always, what makes the classification even more complicated. (Level 5 = subsubsubgroup) always 5 characters in code
-````
-</div>
-
-
-
-## Circular Tree
-```{r}
-
-# Create an edge list
-edges_level1_2 = ICD %>% select(meaning_L1, meaning_L2) %>% unique %>% rename(from=meaning_L1, to=meaning_L2)
-edges_level2_3 = ICD %>% select(meaning_L2, meaning_L3) %>% unique %>% rename(from=meaning_L2, to=meaning_L3)
-edges_level3_4 = ICD %>% select(meaning_L3, meaning_L4) %>% unique %>% rename(from=meaning_L3, to=meaning_L4)
-edge_list=rbind(edges_level1_2, edges_level2_3, edges_level3_4)
-
-
-
+            -- NODE2881 something eventually, but not always, what makes the classification even more complicated. (Level 5) always 5 characters in code
 ```
+
+
 
 
